@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),G=require(require('node:fs').existsSync(require('node:path').join(__dirname,'../dist/core.js'))?'../dist/core.js':'../core.js'),T=require(require('node:fs').existsSync(require('node:path').join(__dirname,'../dist/tax-core.js'))?'../dist/tax-core.js':'../tax-core.js');
+const rule={rate:100,unit:'KG'},p={usd:50,eur:60,currency:'EUR',payment:'PEŞİN',agreement:'DI'};
+const tax={gv:10,kdv:20,otv:10,igv:5,bandrol:2,kkdf:6,emy:[3,8]};const db={taxes:{'123456789012':tax},damping:{},aliases:{DE:'ALMANYA'},countries:['ALMANYA','ÇİN','HİNDİSTAN'],eu:['ALMANYA'],emyCountries:['HİNDİSTAN','ÇİN']};
+let row={gtip:'1234.56.78.90.12',amount:50,expense:10,freight:5,kg:2,qty:1,country:'DE'};
+const close=(x,y)=>assert.ok(Math.abs(x-y)<1e-8,`${x} != ${y}`);
+let r=T.calculateTax(row,rule,p,db);assert.deepEqual(r.errors,[]);close(r.difference,2*100*50/60-60);close(r.cif,2*100*50/60+5);close(r.gv,r.cif*.1);close(r.igv,r.cif*.05);close(r.bandrol,r.cif*.02);close(r.otv,(r.cif+r.gv+r.igv+r.bandrol)*.1);close(r.kdv,(r.cif+r.gv+r.igv+r.bandrol+r.otv)*.2);close(r.workbookTotal,r.taxTotal+r.difference);
+r=T.calculateTax(row,rule,{...p,agreement:'AT'},db);close(r.gv,0);close(r.igv,0);
+r=T.calculateTax({...row,country:'HİNDİSTAN'},rule,{...p,agreement:'AT',payment:'MAL MUKABİLİ'},db);close(r.emy,r.cif*.03);close(r.kkdf,r.cif*.06);
+r=T.calculateTax({...row,exempt:true},rule,p,db);close(r.difference,0);close(r.cif,65);
+r=T.calculateTax(row,rule,{...p,usd:''},db);assert.ok(r.errors.length);
+assert.ok(T.calculateTax({...row,gtip:'000000000000'},undefined,p,db).errors.length);
+assert.ok(T.calculateTax({...row,country:''},rule,p,db).errors.length);
+assert.ok(T.calculateTax(row,rule,{...p,payment:''},db).errors.length);
+assert.ok(G.calculate(row,{rate:3,unit:'M3'},p).errors.length);close(G.calculate({...row,measure:50},{rate:3,unit:'M3'},p).difference,65);
+close(G.num('1.234,56'),1234.56);close(G.num('1234.56'),1234.56);
+const dr={rate:12,unit:'CIF'};db.damping['123456789012|ALMANYA']=dr;r=T.calculateTax(row,rule,p,db);close(r.damping,r.cif*.12);
+db.damping['123456789012|ALMANYA']={rate:100,unit:'Kg'};r=T.calculateTax(row,rule,p,db);close(r.damping,Math.max(0,200-r.cif));
+console.log('PASS: kur, gözetim, birim, GV, İGV, EMY, bandrol, ÖTV, KKDF, damping, KDV, toplam ve eksik veri senaryoları');
