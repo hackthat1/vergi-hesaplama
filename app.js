@@ -52,9 +52,18 @@ function notify(s, type = 'info') {
 
 // Backup current state
 function saveState() {
+    // Serialize rows safely
+    const safeRows = rows.map(r => ({ ...r }));
+
+    // Serialize results safely - exclude non-serializable properties
+    const safeResults = results.map(r => {
+        const { dampingRule, ...rest } = r;
+        return rest;
+    });
+
     const state = {
-        rows: JSON.parse(JSON.stringify(rows)),
-        results: JSON.parse(JSON.stringify(results)),
+        rows: safeRows,
+        results: safeResults,
         fileName,
         workbook: workbook ? true : false,
         viewMode,
@@ -86,8 +95,9 @@ function restoreState() {
     // Update UI
     $('mapping').hidden = true;
     $('fileinfo').textContent = fileName ? fileName : 'Henüz dosya yüklenmedi.';
-    renderRows();
-    updateMetrics();
+
+    // Recalculate to regenerate dampingRule and other computed fields
+    recalc();
     notify('Önceki duruma dönüldü.', 'success');
     return true;
 }
