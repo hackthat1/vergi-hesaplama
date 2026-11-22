@@ -1,0 +1,167 @@
+# Vergi Oranları Otomatik Güncelleme Workflow
+# Her Pazartesi 06:00 UTC (Türkiye 09:00) çalışır
+# Manuel tetikleme de mümkün
+
+name: Update Tax Rates
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Her Pazartesi 06:00 UTC
+  workflow_dispatch:      # Manuel tetikleme
+    inputs:
+      force:
+        description: 'Force update even if no changes'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write  # Commit ve push için gerekli
+
+jobs:
+  update-rates:
+    name: Update Tax Rates from Official Sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Repository'yi checkout et
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Geçmiş için tam klon
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2. Python kur
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'updater/requirements.txt'
+
+      # 3. Sistem bağımlılıkları (pdfplumber için)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            poppler-utils \
+            tesseract-ocr \
+            tesseract-ocr-tur \
+            libjpeg-dev \
+            zlib1g-dev
+
+      # 4. Python bağımlılıkları
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r updater/requirements.txt
+
+      # 5. Pipeline'ı çalıştır
+      - name: Run tax rates update pipeline
+        id: pipeline
+        run: |
+          cd ${{ github.workspace }}
+          python updater/run.py 2>&1 | tee pipeline.log
+
+      # 6. Değişiklik var mı kontrol et
+      - name: Check for changes
+        id: changes
+        run: |
+          cd ${{ github.workspace }}
+
+          # taxes.json ve rates.json değişti mi?
+          if git diff --quiet taxes.json rates.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes in tax rates files"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected in tax rates files"
+            git diff taxes.json rates.json | head -100
+          fi
+
+      # 7. Changelog ve diff raporu varsa artifact olarak kaydet
+      - name: Upload reports as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-reports
+          path: |
+            CHANGELOG_RATES.md
+            updater/output/diff_report.md
+            pipeline.log
+          retention-days: 30
+
+      # 8. Değişiklik varsa commit ve push et
+      - name: Commit and push changes
+        if: steps.changes.outputs.changed == 'true' || github.event.inputs.force == 'true'
+        run: |
+          cd ${{ github.workspace }}
+
+          # Git config
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+          # Değişiklikleri stage et
+          git add taxes.json rates.json CHANGELOG_RATES.md
+
+          # Commit mesajı
+          DATE=$(date +'%Y-%m-%d')
+          COMMIT_MSG="chore: update tax rates from official sources ($DATE)"
+
+          if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
+            COMMIT_MSG="$COMMIT_MSG [forced]"
+          fi
+
+          git commit -m "$COMMIT_MSG"
+
+          # Push
+          git push origin main
+
+          echo "✅ Changes committed and pushed"
+
+      # 9. Başarılı bildirimi
+      - name: Notify success
+        if: success()
+        run: |
+          echo "✅ Tax rates update completed successfully"
+          echo "📊 Updated files: taxes.json, rates.json"
+          echo "📝 Changelog: CHANGELOG_RATES.md"
+
+      # 10. Hata durumunda bildirim
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Tax rates update failed"
+          echo "Check the workflow logs for details"
+          # Buraya Slack/Discord/Email bildirimi eklenebilir
+
+  # Bağımsız doğrulama job'ı (her gün çalışabilir)
+  validate-daily:
+    name: Daily Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install -r updater/requirements.txt
+
+      - name: Validate current files
+        run: |
+          cd ${{ github.workspace }}
+          python -m updater.validators.schema
+
+      - name: Report validation failure
+        if: failure()
+        run: |
+          echo "⚠️ Validation failed for current tax rates files"
+          # Bildirim gönder

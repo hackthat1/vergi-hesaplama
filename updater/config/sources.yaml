@@ -1,0 +1,137 @@
+# Resmi kaynak yapılandırması
+# Her kaynak: URL, çeşme tipi, çekme sıklığı, parser ayarları
+
+sources:
+  # 1. GTIP (Tarife Pozisyonları) - TÜİK Açık Veri Portalı
+  gtip_tuik:
+    name: "GTIP Tarife Pozisyonları"
+    description: "TÜİK'ten güncel GTIP kodları ve açıklamaları"
+    enabled: true
+    schedule: "0 6 * * 1"  # Haftalık Pazartesi
+    fetcher: "tuik"
+    urls:
+      - "https://data.tuik.gov.tr/Bulten/Index?p=Dis-Ticaret-Istatistikleri-2024-14728"
+      - "https://www.tuik.gov.tr/gtip-tarife-pozisyonlari"  # Alternatif
+    output: "updater/output/gtip_raw.json"
+    parser:
+      type: "html_table"
+      table_index: 0
+      columns:
+        - "kod"
+        - "aciklama"
+        - "birim"
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; VergiHesaplamaBot/1.0)"
+
+  # 2. Gümrük Vergisi Oranları - Resmi Gazete (Cumhurbaşkanı Kararları)
+  gv_resmigazete:
+    name: "Gümrük Vergisi Oranları"
+    description: "Cumhurbaşkanı Kararları ile belirlenen GV oranları"
+    enabled: true
+    schedule: "0 6 * * 1"
+    fetcher: "resmigazete"
+    urls:
+      - "https://www.resmigazete.gov.tr/arayuz/aramasonucu?q=G%C3%BCmr%C3%BCk+Vergisi+Oranlar%C4%B1+Karar%C4%B1"
+    search_terms:
+      - "Gümrük Vergisi Oranları"
+      - "Cumhurbaşkanı Kararı"
+      - "Tarife No"
+    output: "updater/output/gv_raw.json"
+    parser:
+      type: "pdf_tables"
+      pdf_password: null
+      table_settings:
+        vertical_strategy: "lines"
+        horizontal_strategy: "lines"
+        snap_tolerance: 3
+
+  # 3. KDV Oranları - GİB
+  kdv_gib:
+    name: "KDV Oranları"
+    description: "GİB KDV mevzuat sayfasından oranlar"
+    enabled: true
+    schedule: "0 6 * * 1"
+    fetcher: "gib"
+    urls:
+      - "https://www.gib.gov.tr/mevzuat/kanunlar/katma-deger-vergisi-kanunu"
+      - "https://www.gib.gov.tr/kurumlar/gib.gov.tr/ekler/mevzuat/kdv/oranlar.pdf"
+    output: "updater/output/kdv_raw.json"
+    parser:
+      type: "pdf_tables"
+
+  # 4. ÖTV Oranları - GİB
+  otv_gib:
+    name: "ÖTV Oranları"
+    description: "GİB ÖTV mevzuat sayfasından oranlar"
+    enabled: true
+    schedule: "0 6 * * 1"
+    fetcher: "gib"
+    urls:
+      - "https://www.gib.gov.tr/mevzuat/kanunlar/ozel-tuketim-vergisi-kanunu"
+      - "https://www.gib.gov.tr/kurumlar/gib.gov.tr/ekler/mevzuat/otv/oranlar.pdf"
+    output: "updater/output/otv_raw.json"
+    parser:
+      type: "pdf_tables"
+
+  # 5. Ek Mali Yükümlülükler (EMY, Bandrol, KKDF, Damping)
+  emy_others:
+    name: "Ek Mali Yükümlülükler"
+    description: "EMY, Bandrol, KKDF, Damping oranları"
+    enabled: true
+    schedule: "0 6 * * 1"
+    fetcher: "resmigazete"
+    urls:
+      - "https://www.resmigazete.gov.tr/arayuz/aramasonucu?q=Ek+Mali+Y%C3%Bck%C3%BCl%C3%BCl%C3%BCk+Oranlar%C4%B1"
+    search_terms:
+      - "Ek Mali Yükümlülük"
+      - "Bandrol Vergisi"
+      - "KKDF"
+      - "Damping"
+    output: "updater/output/emy_raw.json"
+    parser:
+      type: "pdf_tables"
+
+  # 6. Cumhurbaşkanı Kararları (Genel arama)
+  cumhurbaskani_kararlari:
+    name: "Cumhurbaşkanı Kararları - Vergi Oranları"
+    description: "Tüm vergi ile ilgili Cumhurbaşkanı Kararları"
+    enabled: true
+    schedule: "0 6 * * 1"
+    fetcher: "cumhurbaskani"
+    urls:
+      - "https://www.tccb.gov.tr/kurumlar/tccb.gov.tr/ekler/kararlar/"
+    search_terms:
+      - "Gümrük Vergisi"
+      - "Katma Değer Vergisi"
+      - "Özel Tüketim Vergisi"
+      - "Ek Mali Yükümlülük"
+    output: "updater/output/cbk_raw.json"
+    parser:
+      type: "html_list"
+
+# Çıktı dosyaları
+outputs:
+  taxes_json: "taxes.json"
+  rates_json: "rates.json"
+  changelog: "CHANGELOG_RATES.md"
+
+# Doğrulama ayarları
+validation:
+  min_gtip_count: 8000
+  max_rate_change_percent: 50  # Oranlarda %50'den fazla değişim şüpheli
+  required_fields_taxes:
+    - "gtip"
+    - "gv"
+    - "kdv"
+    - "otv"
+  required_fields_rates:
+    - "gtip"
+    - "rate"
+    - "unit"
+    - "note"
+
+# Git ayarları
+git:
+  commit_message: "chore: update tax rates from official sources ({date})"
+  author_name: "github-actions[bot]"
+  author_email: "41898282+github-actions[bot]@users.noreply.github.com"

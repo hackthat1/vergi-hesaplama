@@ -1,0 +1,136 @@
+# GTIP kodu → Vergi türü/Oransal eşleştirme kuralları
+# Kaynak PDF/HTML tablolarından çıkan ham veriyi taxes.json/rates.json formatına dönüştürür
+
+# GTIP kodu formatı normalizasyonu
+gtip_normalization:
+  # 10 haneli kodu 6/8/10 hane olarak sakla
+  keep_lengths: [6, 8, 10]
+  # Nokta, boşluk, tire temizle
+  strip_chars: [" ", ".", "-", "\t", "\n"]
+  # Önek sıfırları koru (0801 vs 801)
+
+# Vergi türü kodları (taxes.json içindeki anahtarlarla eşleşmeli)
+tax_type_codes:
+  GV: "gv"              # Gümrük Vergisi
+  KDV: "kdv"            # Katma Değer Vergisi
+  OTV: "otv"            # Özel Tüketim Vergisi
+  IGV: "igv"            # İlave Gümrük Vergisi
+  EMY: "emy"            # Ek Mali Yükümlülük
+  BANDROL: "bandrol"    # Bandrol Vergisi
+  KKDF: "kkdf"          # Kaynak Kullanımı Destekleme Fonu
+  DAMPING: "damping"    # Damping (Fiyat Destekleme)
+  KULTUR: "kultur"      # Kültür Fonu (varsa)
+
+# ÖTV türü eşleştirme
+otv_type_mapping:
+  "ORANALI": "ORANALI"      # Ad valorem (%)
+  "MÜKTESEP": "MUKTESEP"    # Specific (birim başına TL)
+  "KARMA": "KARMA"          # Karma (her ikisi)
+  "AD VALOREM": "ORANALI"
+  "MUKTESEP": "MUKTESEP"
+  "SPECIFIC": "MUKTESEP"
+
+# Birim kodları (GTIP/UNECE standardı)
+unit_mapping:
+  "KG": "KG"
+  "KGM": "KG"
+  "KILOGRAM": "KG"
+  "TON": "TON"
+  "TNE": "TON"
+  "METRE": "M"
+  "MTR": "M"
+  "M2": "M2"
+  "MTK": "M2"
+  "M3": "M3"
+  "MTQ": "M3"
+  "ADET": "ADET"
+  "NPR": "ADET"
+  "LITRE": "LT"
+  "LTR": "LT"
+  "PAKET": "PAKET"
+  "PK": "PAKET"
+  "KUTU": "KUTU"
+  "BX": "KUTU"
+
+# Ulke kodları (ISO 3166-1 alpha-2) - EMY için
+country_codes:
+  AB: ["DE", "FR", "IT", "ES", "NL", "BE", "AT", "PL", "CZ", "HU", "RO", "BG", "HR", "SI", "SK", "LT", "LV", "EE", "FI", "SE", "DK", "IE", "PT", "GR", "CY", "MT", "LU"]
+  EFTA: ["CH", "NO", "IS", "LI"]
+  DIGER: []  # Diğer ülkeler
+
+# Özel GTIP → Vergi kuralı override'ları (kural tabanlı)
+# Kaynak tablo eksik/yanlış olduğunda manuel düzeltme
+manual_overrides:
+  # Örnek: 8703 (Otomotiv) → GV %10, KDV %18, OTV oranlı
+  "8703":
+    gv: 10
+    kdv: 18
+    otv: 45
+    otv_type: "ORANALI"
+    note: "Otomotiv - resmi karara göre"
+
+  # 2208 (Alkol) → OTV müktesep
+  "2208":
+    gv: 0
+    kdv: 18
+    otv: 150
+    otv_type: "MUKTESEP"
+    note: "Alkol - Lt başına TL"
+
+  # 2402 (Tütün) → OTV oranlı
+  "2402":
+    gv: 0
+    kdv: 18
+    otv: 65
+    otv_type: "ORANALI"
+    note: "Tütün ürünleri"
+
+  # 2710 (Petrol) → OTV müktesep
+  "2710":
+    gv: 0
+    kdv: 18
+    otv: 0
+    otv_type: "MUKTESEP"
+    note: "Petrol ürünleri - kg/Lt bazlı"
+
+# Varsayılan oranlar (eşleşme yoksa)
+defaults:
+  gv: 0
+  kdv: 20
+  otv: 0
+  otv_type: "ORANALI"
+  igv: 0
+  emy: 0
+  bandrol: 0
+  kkdf: 0
+  damping: 0
+  kultur: 0
+
+# rates.json için gözetim oranı eşleştirme
+# GTIP kodu → (oran USD, birim, açıklama)
+surveillance_rates:
+  # Bu kısım rates.json'dan mevcut veriyle merge edilir
+  # Yeni GTIP gelirse default: rate=0, unit="", note="Yeni eklendi"
+  pass
+
+# Veri kalite kuralları
+quality_rules:
+  # Oran 0-100 aralığında olmalı (OTV müktesep hariç)
+  rate_ranges:
+    gv: [0, 100]
+    kdv: [0, 25]
+    otv_oranli: [0, 100]
+    otv_muktessep: [0, 10000]  # TL/birim
+    igv: [0, 100]
+    emy: [0, 100]
+    bandrol: [0, 100]
+    kkdf: [0, 10]
+    damping: [0, 100]
+
+  # Zorunlu alanlar
+  required_per_gtip:
+    - "gtip"
+    - "gv"
+    - "kdv"
+    - "otv"
+    - "otv_type"

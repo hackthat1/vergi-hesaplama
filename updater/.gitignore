@@ -1,0 +1,31 @@
+# Cache ve geçici dosyalar
+cache/
+*.log
+pipeline.log
+
+# Geçici PDF dosyaları
+*.tmp.pdf
+tmp_*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
